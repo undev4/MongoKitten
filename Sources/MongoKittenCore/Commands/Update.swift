@@ -49,6 +49,9 @@ public struct UpdateReply: Decodable, Error, Sendable {
         case ok, writeErrors, writeConcernError, upserted
         case updatableCount = "n"
         case updatedCount = "nModified"
+        case code
+        case codeName
+        case errmsg
     }
     
     public let ok: Int
@@ -57,5 +60,10 @@ public struct UpdateReply: Decodable, Error, Sendable {
     public let upserted: [Document]?
     public let writeErrors: [MongoWriteError]?
     public let writeConcernError: WriteConcernError?
+    
+    /// undev4
+    public let code:Int?
+    public let codeName:String?
+    public let errmsg:String?
 }
 

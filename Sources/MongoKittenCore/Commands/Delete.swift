@@ -69,6 +69,11 @@ public struct DeleteReply: Decodable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case ok, writeErrors, writeConcernError
         case deletes = "n"
+        
+        case errmsg
+        case code
+        case codeName
+        
     }
     
     /// The number of successful deletes
@@ -76,4 +81,9 @@ public struct DeleteReply: Decodable, Sendable {
     public let ok: Int
     public let writeErrors: [MongoWriteError]?
     public let writeConcernError: WriteConcernError?
+    
+    /// undev4
+    public let code:Int?
+    public let codeName:String?
+    public let errmsg:String?
 }

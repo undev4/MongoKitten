@@ -87,6 +87,9 @@ public struct FindAndModifyReply: Codable, Error, Sendable {
         case ok
         case value
         case lastErrorObject
+        case errmsg
+        case code
+        case codeName
     }
     
     /// Contains the command’s execution status. `1` on success, or `0` if an error occurred.
@@ -108,6 +111,12 @@ public struct FindAndModifyReply: Codable, Error, Sendable {
     public let value: Document?
     /// Contains information about updated documents.
     public let lastErrorObject: Document?
+    
+    ///modifications 7.2.3 undev4
+    public let code:Int?
+    public let codeName:String?
+    public let errmsg:String?
+
 }
 
 /// The expected Document value to receive in ``FindAndModifyReply``

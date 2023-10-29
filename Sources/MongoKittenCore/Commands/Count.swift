@@ -25,8 +25,19 @@ public struct CountReply: Sendable, Decodable {
     private enum CodingKeys: String, CodingKey {
         case ok
         case count = "n"
+        
+        ///undev4
+        case errmsg
+        case codeName
+        case code
+       
     }
     
     let ok: Int
     public let count: Int
+    /// undev4
+    public let code:Int?
+    public let codeName:String?
+    public let errmsg:String?
+    
 }

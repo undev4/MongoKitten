@@ -20,4 +20,9 @@ public struct DistinctReply: Decodable {
     public var distinctValues: [Primitive] {
         return values.values
     }
+    
+    /// undev4
+    public let code:Int?
+    public let codeName:String?
+    public let errmsg:String?
 }

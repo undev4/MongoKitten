@@ -21,12 +21,20 @@ public struct InsertReply: Decodable, Error, CustomDebugStringConvertible {
     private enum CodingKeys: String, CodingKey {
         case ok, writeErrors, writeConcernError
         case insertCount = "n"
+        case errmsg
+        case code
+        case codeName
     }
     
     public let ok: Int
     public let insertCount: Int
     public let writeErrors: [MongoWriteError]?
     public let writeConcernError: WriteConcernError?
+    
+    ///undev 4 modifications
+    public let errmsg:String?
+    public let code:Int?
+    public let codeName:String?
     
     public var debugDescription: String {
         if ok == 1 {
