@@ -28,6 +28,7 @@ extension MongoConnection {
     ) async throws -> D {
         let reply = try await executeEncodable(command, namespace: namespace, in: transaction, sessionId: sessionId, logMetadata: logMetadata)
         let document = try reply.getDocument()
+        print(document)
         do {
             return try FastBSONDecoder().decode(D.self, from: document)
         } catch {
