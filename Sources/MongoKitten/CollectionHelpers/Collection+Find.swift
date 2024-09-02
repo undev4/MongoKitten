@@ -1,4 +1,6 @@
+import Tracing
 import NIO
+import NIOConcurrencyHelpers
 import MongoClient
 import MongoKittenCore
 
@@ -30,6 +32,13 @@ extension MongoCollection {
     /// - Parameter query: The query to match documents against
     /// - Returns: A cursor to iterate over the results
     public func find<D: Decodable>(_ query: Document = [:], as type: D.Type) -> MappedCursor<FindQueryBuilder, D> {
+        return find(query).decode(type)
+    }
+
+    /// Finds documents in this collection matching the given query. If no query is given, it returns all documents in the collection. Decodes the results to the given type.
+    /// - Parameter query: The query to match documents against
+    /// - Returns: A cursor to iterate over the results
+    public func find<D: Decodable, Query: MongoKittenQuery>(_ query: Query, as type: D.Type) -> MappedCursor<FindQueryBuilder, D> {
         return find(query).decode(type)
     }
 
@@ -102,12 +111,16 @@ public final class FindQueryBuilder: CountableCursor, PaginatableCursor {
     
     /// The collection this cursor applies to
     private let makeConnection: @Sendable () async throws -> MongoConnection
-    public var command: FindCommand
+    private let _command: NIOLockedValueBox<FindCommand>
+    public var command: FindCommand {
+        get { _command.withLockedValue { $0} }
+        set { _command.withLockedValue { $0 = newValue } }
+    }
     private let collection: MongoCollection
     public var isDrained: Bool { false }
 
     init(command: FindCommand, collection: MongoCollection, makeConnection: @Sendable @escaping () async throws -> MongoConnection, transaction: MongoTransaction? = nil) {
-        self.command = command
+        self._command = NIOLockedValueBox(command)
         self.makeConnection = makeConnection
         self.collection = collection
     }
@@ -116,15 +129,23 @@ public final class FindQueryBuilder: CountableCursor, PaginatableCursor {
         return try await makeConnection()
     }
 
-    public func execute() async throws -> FinalizedCursor<FindQueryBuilder> {
+    @Sendable public func execute() async throws -> FinalizedCursor<FindQueryBuilder> {
         let connection = try await getConnection()
+        let findSpan: any Span
+        if let context = collection.context {
+            findSpan = InstrumentationSystem.tracer.startAnySpan("Find<\(collection.namespace)>", context: context)
+        } else {
+            findSpan = InstrumentationSystem.tracer.startAnySpan("Find<\(collection.namespace)>")
+        }
         let response = try await connection.executeCodable(
             self.command,
             decodeAs: MongoCursorResponse.self,
             namespace: MongoNamespace(to: "$cmd", inDatabase: self.collection.database.name),
             in: self.collection.transaction,
             sessionId: self.collection.sessionId ?? connection.implicitSessionId,
-            logMetadata: self.collection.database.logMetadata
+            logMetadata: self.collection.database.logMetadata,
+            traceLabel: "Find<\(collection.namespace)>",
+            serviceContext: findSpan.context
         )
         
         let cursor = MongoCursor(
@@ -132,8 +153,11 @@ public final class FindQueryBuilder: CountableCursor, PaginatableCursor {
             in: self.collection.namespace,
             connection: connection,
             session: connection.implicitSession,
-            transaction: self.collection.transaction
+            transaction: self.collection.transaction,
+            traceLabel: "Find<\(collection.namespace)>",
+            context: findSpan.context
         )
+        
         return FinalizedCursor(basedOn: self, cursor: cursor)
     }
     

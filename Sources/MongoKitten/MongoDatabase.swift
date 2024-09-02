@@ -1,3 +1,4 @@
+import Tracing
 import MongoClient
 import Logging
 import Foundation
@@ -11,18 +12,25 @@ import NIOTransportServices
 /// A reference to a MongoDB database, over a `MongoConnectionPool`.
 ///
 /// Databases hold collections of documents.
-public class MongoDatabase {
-    internal var transaction: MongoTransaction?
+public class MongoDatabase: @unchecked Sendable {
+    internal let transaction: MongoTransaction?
     public var activeTransaction: MongoTransaction? {
         transaction
     }
-    public internal(set) var session: MongoClientSession?
-    
-    private let lock = NIOLock()
-    private var _logMetadata: Logger.Metadata?
+    public let session: MongoClientSession?
+
+    private let _span: NIOLockedValueBox<(any Span)?>
+    internal var span: (any Span)? {
+        get { _span.withLockedValue { $0 } }
+        set { _span.withLockedValue { $0 = newValue } }
+    }
+    internal var context: ServiceContext? {
+        span?.context
+    }
+    private let _logMetadata: NIOLockedValueBox<Logger.Metadata?>
     public var logMetadata: Logger.Metadata? {
-        get { lock.withLock { _logMetadata } }
-        set { lock.withLock { _logMetadata = newValue } }
+        get { _logMetadata.withLockedValue { $0 } }
+        set { _logMetadata.withLockedValue { $0 = newValue } }
     }
     
     public var sessionId: SessionIdentifier? {
@@ -48,15 +56,32 @@ public class MongoDatabase {
     }
     
     public func adoptingLogMetadata(_ metadata: Logger.Metadata) -> MongoDatabase {
-        let copy = MongoDatabase(named: name, pool: pool)
+        let copy = MongoDatabase(
+            named: name,
+            pool: pool,
+            transaction: transaction,
+            session: session
+        )
         copy.logMetadata = metadata
         return copy
     }
 
-    internal init(named name: String, pool: MongoConnectionPool) {
+    internal init(
+        named name: String,
+        pool: MongoConnectionPool,
+        span: (any Span)? = nil,
+        transaction: MongoTransaction?,
+        session: MongoClientSession?
+    ) {
         self.name = name
         self.pool = pool
+        self._span = NIOLockedValueBox(span)
+        self._logMetadata = NIOLockedValueBox(nil)
+        self.transaction = transaction
+        self.session = session
     }
+
+    deinit { span?.end() }
     
     /// Connect to the database at the given `uri` using ``MongoCluster``
     ///
@@ -107,7 +132,12 @@ public class MongoDatabase {
         }
         
         let cluster = try MongoCluster(lazyConnectingTo: settings, logger: logger)
-        return MongoDatabase(named: targetDatabase, pool: cluster)
+        return MongoDatabase(
+            named: targetDatabase,
+            pool: cluster,
+            transaction: nil,
+            session: nil
+        )
     }
 
     /// Connect to the database with the given settings. You can also use `connect(_:on:)` to connect by using a connection string.
@@ -125,7 +155,12 @@ public class MongoDatabase {
         }
 
         let cluster = try await MongoCluster(connectingTo: settings, logger: logger)
-        return MongoDatabase(named: targetDatabase, pool: cluster)
+        return MongoDatabase(
+            named: targetDatabase,
+            pool: cluster,
+            transaction: nil,
+            session: nil
+        )
     }
     
     /// Creates a new tranasction provided the SessionOptions and optional TransactionOptions
@@ -155,11 +190,15 @@ public class MongoDatabase {
 
         let newSession = self.pool.sessionManager.retainSession(with: options)
         let transaction = newSession.startTransaction(autocommit: autoCommit)
-        
-        let db = MongoTransactionDatabase(named: name, pool: connection)
-        db.transaction = transaction
-        db.session = newSession
-        return db
+
+        let span = InstrumentationSystem.tracer.startAnySpan("Transaction(\(transaction.number))")
+        return MongoTransactionDatabase(
+            named: name,
+            pool: connection,
+            span: span,
+            transaction: transaction,
+            session: newSession
+        )
     }
 
     /// Get a `MongoCollection` by providing a collection name as a `String`
@@ -168,10 +207,13 @@ public class MongoDatabase {
     ///
     /// - returns: The requested collection in this database
     public subscript(collection: String) -> MongoCollection {
-        let collection = MongoCollection(named: collection, in: self)
-        collection.session = self.session
-        collection.transaction = self.transaction
-        return collection
+        MongoCollection(
+            named: collection,
+            in: self,
+            context: context,
+            transaction: self.transaction,
+            session: self.session
+        )
     }
 
     /// Drops the current database, deleting the associated data files
@@ -188,7 +230,8 @@ public class MongoDatabase {
             namespace: self.commandNamespace,
             in: self.transaction,
             sessionId: connection.implicitSessionId,
-            logMetadata: logMetadata
+            logMetadata: logMetadata,
+            traceLabel: "DropDatabase"
         )
         try reply.assertOK()
     }
@@ -204,13 +247,16 @@ public class MongoDatabase {
         }
         
         let connection = try await pool.next(for: .basic)
+        let span = InstrumentationSystem.tracer.startAnySpan("ListCollections")
         let response = try await connection.executeCodable(
             ListCollections(),
             decodeAs: MongoCursorResponse.self,
             namespace: self.commandNamespace,
             in: self.transaction,
             sessionId: connection.implicitSessionId,
-            logMetadata: logMetadata
+            logMetadata: logMetadata,
+            traceLabel: "ListCollections",
+            serviceContext: span.context
         )
         
         let cursor = MongoCursor(
@@ -218,11 +264,19 @@ public class MongoDatabase {
             in: .administrativeCommand,
             connection: connection,
             session: connection.implicitSession,
-            transaction: self.transaction
+            transaction: self.transaction,
+            traceLabel: "ListCollections",
+            context: span.context
         ).decode(CollectionDescription.self)
         
         return try await cursor.drain().map { description in
-            return MongoCollection(named: description.name, in: self)
+            return MongoCollection(
+                named: description.name,
+                in: self,
+                context: context,
+                transaction: self.transaction,
+                session: self.session
+            )
         }
     }
 }
@@ -252,7 +306,12 @@ extension EventLoopFuture where Value == Optional<Document> {
 
 extension MongoConnectionPool {
     public subscript(db: String) -> MongoDatabase {
-        return MongoDatabase(named: db, pool: self)
+        return MongoDatabase(
+            named: db,
+            pool: self,
+            transaction: nil,
+            session: nil
+        )
     }
 
     /// Lists all databases your user has knowledge of in this cluster
@@ -262,11 +321,17 @@ extension MongoConnectionPool {
             ListDatabases(),
             decodeAs: ListDatabasesResponse.self,
             namespace: .administrativeCommand,
-            sessionId: connection.implicitSessionId
+            sessionId: connection.implicitSessionId,
+            traceLabel: "ListDatabases"
         )
         
         return response.databases.map { description in
-            return MongoDatabase(named: description.name, pool: self)
+            return MongoDatabase(
+                named: description.name,
+                pool: self,
+                transaction: nil,
+                session: nil
+            )
         }
     }
 }

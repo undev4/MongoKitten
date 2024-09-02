@@ -18,7 +18,7 @@ public final actor MongoClientContext {
     internal var lastServerHandshakeDate = Date()
     internal var didError = false
     private var outdatedDB = false
-    let logger: Logger
+    nonisolated let logger: Logger
 
     internal func handleReply(_ reply: MongoServerReply) -> Bool {
         guard let index = queries.firstIndex(where: { $0.requestId == reply.responseTo }) else {
@@ -73,15 +73,5 @@ public final actor MongoClientContext {
 
     public init(logger: Logger) {
         self.logger = logger
-    }
-}
-
-struct MongoClientRequest<Request: MongoRequestMessage> {
-    let command: Request
-    let namespace: MongoNamespace
-    
-    init(command: Request, namespace: MongoNamespace) {
-        self.command = command
-        self.namespace = namespace
     }
 }

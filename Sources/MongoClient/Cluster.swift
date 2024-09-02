@@ -185,7 +185,7 @@ public final class MongoCluster: MongoConnectionPool, @unchecked Sendable {
             // Kick off the connection process
             try await resolveSettings()
             
-            await scheduleDiscovery()
+            scheduleDiscovery()
             self.completedInitialDiscovery = true
         }
     }
@@ -229,10 +229,10 @@ public final class MongoCluster: MongoConnectionPool, @unchecked Sendable {
             throw MongoError(.cannotConnect, reason: .noAvailableHosts)
         }
 
-        await scheduleDiscovery()
+        scheduleDiscovery()
     }
 
-    @MainActor private func scheduleDiscovery() {
+    private func scheduleDiscovery() {
         discovering?.cancel()
         discovering = Task { [heartbeatFrequency] in
             if isDiscovering { return }
@@ -240,16 +240,17 @@ public final class MongoCluster: MongoConnectionPool, @unchecked Sendable {
             isDiscovering = true
             defer { isDiscovering = false }
             
-            while !isClosed {
-                await rediscover()
-                didRediscover?()
+            weak var `self` = self
+            while let self, !self.isClosed {
+                await self.rediscover()
+                self.didRediscover?()
 
                 try await Task.sleep(nanoseconds: UInt64(heartbeatFrequency.nanoseconds))
             }
         }
     }
 
-    @MainActor private var discovering: Task<Void, Error>?
+    private var discovering: Task<Void, Error>?
     private var _hosts: Set<ConnectionSettings.Host>
     private var hosts: Set<ConnectionSettings.Host> {
         get { lock.withLock { _hosts } }
@@ -592,6 +593,10 @@ public final class MongoCluster: MongoConnectionPool, @unchecked Sendable {
     /// - Warning: Any outstanding query results may be cancelled, but the sent query might still be executed.
     public func disconnect() async {
         logger.debug("Disconnecting MongoDB Cluster")
+
+        discovering?.cancel()
+        discovering = nil
+
         self.wireVersion = nil
         self.isClosed = true
         self.completedInitialDiscovery = false
@@ -617,7 +622,7 @@ public final class MongoCluster: MongoConnectionPool, @unchecked Sendable {
         _ = try await self.next(for: .writable)
         await rediscover()
         self.completedInitialDiscovery = true
-        await scheduleDiscovery()
+        scheduleDiscovery()
     }
 }
 

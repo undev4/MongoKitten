@@ -13,7 +13,7 @@ public struct QueryMatcher<M: KeyPathQueryable> {
 
     public subscript<T: Codable>(dynamicMember keyPath: KeyPath<M, QueryableField<T>>) -> QuerySubject<M, T> {
         let path = M.resolveFieldPath(keyPath)
-        return QuerySubject(path: FieldPath(components: path))
+        return QuerySubject(_path: FieldPath(components: path))
     }
 }
 
@@ -22,11 +22,12 @@ public struct QueryMatcher<M: KeyPathQueryable> {
 /// Used to construct type-checked queries
 @dynamicMemberLookup
 public struct QuerySubject<M: KeyPathQueryable, T: Codable> {
-    internal let path: FieldPath!
+    internal let _path: FieldPath!
+    public var path: FieldPath { _path }
     
     public subscript<New>(dynamicMember keyPath: KeyPath<T, QueryableField<New>>) -> QuerySubject<M, New> where T: KeyPathQueryable {
         let path = T.resolveFieldPath(keyPath)
-        return QuerySubject<M, New>(path: FieldPath(components: self.path.components + path))
+        return QuerySubject<M, New>(_path: FieldPath(components: self.path.components + path))
     }
 }
 
@@ -156,15 +157,16 @@ public struct ModelUpdater<M: KeyPathQueryableModel & MutableModel> {
         )
     }
     
-    public subscript<P: Primitive>(dynamicMember keyPath: WritableKeyPath<M, QueryableField<P>>) -> P {
+    public subscript<P: PrimitiveEncodable & Codable>(dynamicMember keyPath: WritableKeyPath<M, QueryableField<P>>) -> P {
         get {
             update.model[keyPath: keyPath].value!
         }
         set {
             update.model[keyPath: keyPath].value = newValue
-            
-            let path = M.resolveFieldPath(keyPath)
-            update.changes[path] = newValue
+            update.setField(
+                at: M.resolveFieldPath(keyPath),
+                to: try newValue.encodePrimitive()
+            )
         }
     }
 }
@@ -176,7 +178,17 @@ public struct ModelUpdater<M: KeyPathQueryableModel & MutableModel> {
 ///     }.apply(on: meow[User.self])
 public struct PartialUpdate<M: KeyPathQueryableModel & MutableModel> {
     var model: M
-    var changes = Document()
+    var valuesForSetting: [[String]: () throws -> Primitive] = [:]
+    
+    mutating func setField(at path: [String], to newValue: @autoclosure @escaping () throws -> Primitive) {
+        valuesForSetting[path] = newValue
+    }
+    
+    var changes: Document {
+        get throws {
+            try valuesForSetting.reduce(into: Document()) { doc, change in doc[change.key] = try change.value() }
+        }
+    }
     
     /// Applies the changes and returns an updated model
     public func apply(on collection: MeowCollection<M>) async throws -> M {
@@ -188,6 +200,11 @@ public struct PartialUpdate<M: KeyPathQueryableModel & MutableModel> {
         }
         
         return model
+    }
+    
+    /// Applies the changes and returns an updated model
+    public func apply(in database: MeowDatabase) async throws -> M {
+        try await apply(on: database.collection(for: M.self))
     }
 }
 

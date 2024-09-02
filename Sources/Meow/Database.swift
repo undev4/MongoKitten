@@ -5,14 +5,14 @@ import Dispatch
 import NIO
 
 /// A Meow wrapper around `MongoDatabase`, that allows subscripting with a `Model` type to get a `MeowCollection`
-/// A MeowDatabase can exist in a ransaction state, at which point it's actually a subclass names `MeowTransactionDatabase`.
+/// A MeowDatabase can exist in a transaction state, at which point it's actually a subclass named `MeowTransactionDatabase`.
 ///
 /// Example usage:
 ///
 ///     let mongodb: MongoDatabase = mongoCluster["superapp"]
 ///     let meow = MeowDatabase(mongodb)
 ///     let users: MeowCollection<User> = meow[User.self]
-public class MeowDatabase {
+public class MeowDatabase: @unchecked Sendable {
     public let raw: MongoDatabase
     
     public init(_ database: MongoDatabase) {
@@ -57,7 +57,7 @@ public class MeowDatabase {
 ///     let mongodb: MongoDatabase = mongoCluster["superapp"]
 ///     let meow = MeowDatabase(mongodb)
 ///     let users: MeowCollection<User> = meow[User.self]
-public final class MeowTransactionDatabase: MeowDatabase {
+public final class MeowTransactionDatabase: MeowDatabase, @unchecked Sendable {
     private let transaction: MongoTransactionDatabase
     
     fileprivate init(_ transaction: MongoTransactionDatabase) {

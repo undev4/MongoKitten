@@ -1,4 +1,4 @@
-// swift-tools-version:5.7
+// swift-tools-version:6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -27,22 +27,22 @@ let package = Package(
     dependencies: [
         // ✏️
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
-        
+
         // 📈
         .package(url: "https://github.com/apple/swift-metrics.git", "1.0.0" ..< "3.0.0"),
-        
+
         // ✅
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.0"),
-        
+
         // 💾
         .package(url: "https://github.com/orlandos-nl/BSON.git", from: "8.0.9"),
-        
+
         // 🚀
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.43.0"),
-        
+
         // 📚
         .package(url: "https://github.com/orlandos-nl/DNSClient.git", from: "2.2.1"),
-        
+
         // 🔑
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.0.0"),
 
@@ -52,7 +52,10 @@ let package = Package(
     targets: [
         .target(
             name: "_MongoKittenCrypto",
-            dependencies: []),
+            dependencies: [],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete"),
+            ]),
         .target(
             name: "MongoCore",
             dependencies: [
@@ -63,16 +66,28 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Metrics", package: "swift-metrics"),
                 .product(name: "Atomics", package: "swift-atomics"),
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete"),
             ]),
         .target(
             name: "MongoKittenCore",
-            dependencies: ["MongoClient"]),
+            dependencies: ["MongoClient"],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete"),
+            ]),
         .target(
             name: "MongoKitten",
-            dependencies: ["MongoClient", "MongoKittenCore"]),
+            dependencies: ["MongoClient", "MongoKittenCore"],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete"),
+            ]),
         .target(
             name: "Meow",
-            dependencies: ["MongoKitten"]),
+            dependencies: ["MongoKitten"],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete"),
+            ]),
         .target(
             name: "MongoClient",
             dependencies: [
@@ -80,6 +95,9 @@ let package = Package(
                 "_MongoKittenCrypto",
                 .product(name: "DNSClient", package: "DNSClient"),
                 .product(name: "Tracing", package: "swift-distributed-tracing")
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency=complete"),
             ]
         ),
         .testTarget(

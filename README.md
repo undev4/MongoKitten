@@ -1,4 +1,6 @@
-# <img height="200px" style="float: right;" src="https://user-images.githubusercontent.com/1951674/224335889-c6345081-fef9-4b01-95ba-c3a718aa91e9.png" /> MongoKitten
+<a href="https://unbeatable.software"><img src="./assets/Header.png" /></a>
+
+<img src="./assets/Descriptions.gif" />
 
 A fast, pure swift [MongoDB](https://mongodb.com) driver based on [Swift NIO](https://github.com/apple/swift-nio) built for Server Side Swift. It features a great API and a battle-tested core. Supporting both MongoDB in server and embedded environments.
 
@@ -8,7 +10,7 @@ MongoKitten is a fully asynchronous driver, which means that it doesn't block an
 
 [Join our Discord](https://discord.gg/H6799jh) for any questions and friendly banter.
 
-If you need hands-on support on your projects, our team is available at [hello@unbeatable.software](mailto:hello@unbeatable.software).
+If you need hands-on support on your projects, our team is available at [joannis@unbeatable.software](mailto:joannis@unbeatable.software).
 
 [Look into Sample Code](https://github.com/orlandos-nl/MongoKitten-Examples) using MongoKitten & Vapor
 
@@ -140,7 +142,7 @@ app.mongo = try MongoDatabase.lazyConnect(to: "mongodb://localhost/my-app")
 In MongoKitten, you'll find two main variations of connecting to MongoDB.
 
 - `connect` calls are `async throws`, and will _immediately_ attempt to establish a connection. These functions throw an error if unsuccessful.
-- `lazyConnect` calls are `thorws`, and will defer establishing a connection until it's necessary. Errors are only thrown if the provided credentials are unusable.
+- `lazyConnect` calls are `throws`, and will defer establishing a connection until it's necessary. Errors are only thrown if the provided credentials are unusable.
 
 Connect's advantage is that a booted server is known to have a connection. Any issues with MongoBD will arise _immediately_, and the error is easily inspectable.
 
