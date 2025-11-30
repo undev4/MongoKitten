@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - master/7.0
+      - main
   pull_request:
     branches:
       - master/7.0
+      - main
 
 jobs:
   linux:
@@ -14,19 +16,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        swift-version: ["5.7", "5.8"]
-        mongodb-version: ["4.4", "5.0", "6.0", "7.0"]
+        swift-version: ["5.10", "6.0"]
+        mongodb-version: ["4.4", "5.0", "6.0"]
     steps:
       - name: Check out
         uses: actions/checkout@v3
 
       - name: Install Swift
-        uses: swift-actions/setup-swift@v1
+        uses: swift-actions/setup-swift@v2
         with:
           swift-version: ${{ matrix.swift-version }}
 
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.8.0
+        uses: supercharge/mongodb-github-action@1.12.0
         with:
           mongodb-version: ${{ matrix.mongodb-version }}
           mongodb-replica-set: mk-rs
